@@ -1,0 +1,9 @@
+**/*.tmp
+**/*.old
+
+**/__pycache__/
+
+.venv/
+
+chroma_db/
+
