@@ -26,7 +26,7 @@ def initialize_llm_components(ollama_config: OllamaConfig, cache_config: Embeddi
     )
     return llm, cached_embeddings
 
-def create_workflow(retriever, llm, prompt_template: str = None):
+def create_workflow(retriever, llm, prompt_template: str = None, only_print_prompt: bool = False, stream: bool = False):
     """Create and return the LangGraph workflow with type safety."""
     template = prompt_template or """
     You are an expert in JSON schemas. Use the following context to answer the question.  
@@ -54,14 +54,39 @@ def create_workflow(retriever, llm, prompt_template: str = None):
             for doc in context
         )
         
-        chain = (
-            {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
-            | prompt
-            | llm
-        )
-        answer = chain.invoke({"context": context_content, "question": question})
+#         chain = (
+#             {"context": RunnablePassthrough(), "question": RunnablePassthrough()}
+#             | prompt
+#             | llm
+#         )
+#         answer = chain.invoke({"context": context_content, "question": question})
+#         
+#         return {"answer": answer, "context": context}
+        # Prepare the filled prompt string
+        filled_prompt = prompt.invoke({"context": context_content, "question": question})
         
-        return {"answer": answer, "context": context}
+        if only_print_prompt:
+            # Return only the augmented prompt string without calling the LLM
+            return {"answer": filled_prompt, "context": context}
+        else:
+            # Run the LLM on the prompt and return the answer
+            
+            if not stream:
+                # Sync
+                answer = llm.invoke(filled_prompt)
+            else:
+                # Stream tokens from the LLM
+                token_stream = llm.stream(filled_prompt)
+                
+                # Collect tokens progressively or yield them if your framework supports it
+                answer_chunks = []
+                for token in token_stream:
+                    print(token, end="", flush=True)  # or send to UI progressively
+                    answer_chunks.append(token)
+                
+                answer = "".join(answer_chunks)
+
+            return {"answer": answer, "context": context}
 
     workflow = StateGraph(State)
     workflow.add_node("retrieve", retrieve)

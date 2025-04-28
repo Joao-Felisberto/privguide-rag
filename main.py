@@ -1,6 +1,6 @@
 import os
 import time
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from config import AppConfig, OllamaConfig, VectorStoreConfig, DocumentLoaderConfig, EmbeddingCacheConfig
 from llm.ollama import initialize_llm_components, create_workflow
 from store.chroma import initialize_vector_store
@@ -16,6 +16,8 @@ def get_config_from_args() -> AppConfig:
                        help="Ollama model to use")
     parser.add_argument('--embedding-model', 
                        help="Embedding model to use")
+    parser.add_argument('--stream-response', action=BooleanOptionalAction,
+                       help="Do not wait for the response to generate and stream it instead")
     
     # Vector store config
     parser.add_argument('--vector-dir', 
@@ -49,6 +51,8 @@ def get_config_from_args() -> AppConfig:
         config.ollama.model = args.ollama_model
     if args.embedding_model:
         config.ollama.embedding_model = args.embedding_model
+    if args.stream_response:
+        config.ollama.stream_response = args.stream_response
     
     if args.vector_dir:
         config.vector_store.directory = args.vector_dir
@@ -95,7 +99,7 @@ def main():
     print(f"Vector store created in {time.time() - start_time:.2f} seconds")
 
     print("Creating workflow...")
-    graph = create_workflow(retriever, llm)
+    graph = create_workflow(retriever, llm, only_print_prompt=False, stream=config.ollama.stream_response)
     print("System ready!")
 
     print("Ready to answer questions. Type 'exit' to quit.")
@@ -106,8 +110,8 @@ def main():
         
         try:
             result = graph.invoke({"question": question})
-            print("\nAnswer:")
-            print(result["answer"])
+            # print("\nAnswer:")
+            # print(result["answer"])
             print("\nSources used:")
             for doc in result["context"]:
                 print(f"- {doc.metadata['source']}")

@@ -6,6 +6,7 @@ class OllamaConfig:
     endpoint: str = "http://localhost:11434"
     model: str = "mistral"
     embedding_model: str = "all-minilm"
+    stream_response: bool = False
 
 @dataclass
 class VectorStoreConfig:
