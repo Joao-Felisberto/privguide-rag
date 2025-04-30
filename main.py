@@ -18,6 +18,8 @@ def get_config_from_args() -> AppConfig:
                        help="Embedding model to use")
     parser.add_argument('--stream-response', action=BooleanOptionalAction,
                        help="Do not wait for the response to generate and stream it instead")
+    parser.add_argument('--only-print-prompt', action=BooleanOptionalAction,
+                       help="Do not send the augmented prompt to the llm and print it instead")
     
     # Vector store config
     parser.add_argument('--vector-dir', 
@@ -53,6 +55,8 @@ def get_config_from_args() -> AppConfig:
         config.ollama.embedding_model = args.embedding_model
     if args.stream_response:
         config.ollama.stream_response = args.stream_response
+    if args.only_print_prompt:
+        config.ollama.only_print_prompt = args.only_print_prompt
     
     if args.vector_dir:
         config.vector_store.directory = args.vector_dir
@@ -99,7 +103,7 @@ def main():
     print(f"Vector store created in {time.time() - start_time:.2f} seconds")
 
     print("Creating workflow...")
-    graph = create_workflow(retriever, llm, only_print_prompt=False, stream=config.ollama.stream_response)
+    graph = create_workflow(retriever, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
     print("System ready!")
 
     print("Ready to answer questions. Type 'exit' to quit.")
@@ -112,6 +116,9 @@ def main():
             result = graph.invoke({"question": question})
             # print("\nAnswer:")
             # print(result["answer"])
+            if config.ollama.only_print_prompt:
+                print("\nPrompt:")
+                print(result["answer"])
             print("\nSources used:")
             for doc in result["context"]:
                 print(f"- {doc.metadata['source']}")

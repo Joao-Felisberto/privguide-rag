@@ -7,6 +7,7 @@ class OllamaConfig:
     model: str = "mistral"
     embedding_model: str = "all-minilm"
     stream_response: bool = False
+    only_print_prompt: bool = False
 
 @dataclass
 class VectorStoreConfig:
