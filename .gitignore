@@ -1,6 +1,8 @@
 **/*.tmp
 **/*.old
 
+tests/
+
 **/__pycache__/
 
 .venv/

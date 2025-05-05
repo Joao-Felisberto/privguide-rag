@@ -9,6 +9,10 @@ from docs.document_loader import load_documents_parallel
 def get_config_from_args() -> AppConfig:
     parser = ArgumentParser(description="RAG System with Ollama and Chroma")
     
+    # General config
+    parser.add_argument('--test', action=BooleanOptionalAction,
+                       help="Run every query in the tests folder, outputting their results")
+
     # Ollama config
     parser.add_argument('--ollama-endpoint', 
                        help="Ollama server endpoint")
@@ -47,6 +51,8 @@ def get_config_from_args() -> AppConfig:
     config = AppConfig()
     
     # Update with provided args
+    if args.test:
+        config.test = args.test
     if args.ollama_endpoint:
         config.ollama.endpoint = args.ollama_endpoint
     if args.ollama_model:
@@ -106,24 +112,50 @@ def main():
     graph = create_workflow(retriever, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
     print("System ready!")
 
-    print("Ready to answer questions. Type 'exit' to quit.")
-    while True:
-        question = input("\nQuestion: ")
-        if question.lower() in ('exit', 'q'):
-            break
-        
-        try:
-            result = graph.invoke({"question": question})
-            # print("\nAnswer:")
-            # print(result["answer"])
-            if config.ollama.only_print_prompt:
-                print("\nPrompt:")
-                print(result["answer"])
-            print("\nSources used:")
-            for doc in result["context"]:
-                print(f"- {doc.metadata['source']}")
-        except Exception as e:
-            print(f"Error processing your question: {e}")
+    if config.test:
+        if not os.path.isdir("tests/prompts"):
+            print("'tests/prompts' not found")
+        if not os.path.isdir("tests/answers"):
+            print("'tests/answers' not found")
+        import json
+        print("Running tests")
+
+        prompts = os.listdir("tests/prompts")
+        answers = os.listdir("tests/answers")
+        for prompt_f in prompts:
+            # TODO: make better caching method
+            if prompt_f in answers:
+                print(f"Skipping '{prompt_f}'...")
+                continue
+            print(f"Running test '{prompt_f}'...")
+            with open(f"tests/prompts/{prompt_f}") as f:
+                prompt = f.read()
+            try:
+                result = graph.invoke({"question": prompt})
+                sources = '\n- '.join([doc.metadata['source'] for doc in result["context"]])
+                with open(f"tests/answers/{prompt_f}", "w") as f:
+                    f.write(f"{result['answer']}\n{sources}")
+            except Exception as e:
+                print(f"Error processing your question: {e}")
+    else:
+        print("Ready to answer questions. Type 'exit' to quit.")
+        while True:
+            question = input("\nQuestion: ")
+            if question.lower() in ('exit', 'q'):
+                break
+            
+            try:
+                result = graph.invoke({"question": question})
+                # print("\nAnswer:")
+                # print(result["answer"])
+                if config.ollama.only_print_prompt:
+                    print("\nPrompt:")
+                    print(result["answer"])
+                print("\nSources used:")
+                for doc in result["context"]:
+                    print(f"- {doc.metadata['source']}")
+            except Exception as e:
+                print(f"Error processing your question: {e}")
 
 if __name__ == "__main__":
     main()

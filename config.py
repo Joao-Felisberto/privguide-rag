@@ -28,6 +28,7 @@ class EmbeddingCacheConfig:
 
 @dataclass
 class AppConfig:
+    test: bool = False
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     vector_store: VectorStoreConfig = field(default_factory=VectorStoreConfig)
     document_loader: DocumentLoaderConfig = field(default_factory=DocumentLoaderConfig)
