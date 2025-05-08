@@ -1,12 +1,14 @@
 import os
 import time
+import yaml
+from typing import List, Optional
 from argparse import ArgumentParser, BooleanOptionalAction
 from config import AppConfig, OllamaConfig, VectorStoreConfig, DocumentLoaderConfig, EmbeddingCacheConfig
 from llm.ollama import initialize_llm_components, create_workflow
 from store.chroma import initialize_vector_store
 from docs.document_loader import load_documents_parallel
 
-def get_config_from_args() -> AppConfig:
+def get_config_from_args(arg_list: Optional[List[str]] = None) -> AppConfig:
     parser = ArgumentParser(description="RAG System with Ollama and Chroma")
     
     # General config
@@ -14,6 +16,8 @@ def get_config_from_args() -> AppConfig:
                        help="Run every query in the tests folder, outputting their results")
 
     # Ollama config
+    parser.add_argument('--prompt', 
+                       help="File with the prompt to use, leave empty to interactively ask the user")
     parser.add_argument('--ollama-endpoint', 
                        help="Ollama server endpoint")
     parser.add_argument('--ollama-model', 
@@ -45,7 +49,7 @@ def get_config_from_args() -> AppConfig:
     parser.add_argument('--embedding-dir',
                        help="Directory for embedding cache")
     
-    args = parser.parse_args()
+    args = parser.parse_args(arg_list)
     
     # Create config with defaults
     config = AppConfig()
@@ -53,6 +57,8 @@ def get_config_from_args() -> AppConfig:
     # Update with provided args
     if args.test:
         config.test = args.test
+    if args.prompt:
+        config.ollama.prompt = args.prompt
     if args.ollama_endpoint:
         config.ollama.endpoint = args.ollama_endpoint
     if args.ollama_model:
@@ -83,8 +89,8 @@ def get_config_from_args() -> AppConfig:
     
     return config
 
-def main():
-    config = get_config_from_args()
+def main(arg_l: Optional[List[str]] = None):
+    config = get_config_from_args(arg_l)
 
     print("Initializing components...")
     llm, embeddings = initialize_llm_components(config.ollama, config.embedding_cache)
@@ -140,7 +146,10 @@ def main():
     else:
         print("Ready to answer questions. Type 'exit' to quit.")
         while True:
-            question = input("\nQuestion: ")
+            if config.ollama.prompt is not None:
+                question = config.ollama.prompt
+            else:
+                question = input("\nQuestion: ")
             if question.lower() in ('exit', 'q'):
                 break
             
@@ -157,5 +166,60 @@ def main():
             except Exception as e:
                 print(f"Error processing your question: {e}")
 
+def test():    
+    with open("tests/spec.yml") as f:
+        metadata = yaml.safe_load(f)
+
+    for test in metadata: 
+        config = get_config_from_args(test["args"].split())
+
+        print("Initializing components...")
+        llm, embeddings = initialize_llm_components(config.ollama, config.embedding_cache)
+        
+        add_documents = (
+            not os.path.exists(config.vector_store.directory) and 
+            config.document_loader.data_directories
+        )
+        documents = None
+        if add_documents:
+            print("Loading documents...")
+            documents = load_documents_parallel(config.document_loader.data_directories)
+            print(f"Loaded {len(documents)} documents")
+
+        print("Creating vector store...")
+        start_time = time.time()
+        vector_store, retriever = initialize_vector_store(
+            embeddings, 
+            config.vector_store, 
+            documents
+        )
+        print(f"Vector store created in {time.time() - start_time:.2f} seconds")
+
+        print("Creating workflow...")
+        graph = create_workflow(retriever, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
+        print("System ready!")
+
+        answers = os.listdir("tests/answers")
+        if test['prompt'] in answers:
+            print(f"Skipping '{test['prompt']}'...")
+            continue
+        
+        with open(f"tests/prompts/{test['prompt']}") as f:
+            prompt = f.read()
+        try:
+            result = graph.invoke({"question": prompt})
+            sources = '\n- '.join([doc.metadata['source'] for doc in result["context"]])
+            with open(f"tests/answers/{test['prompt']}", "w") as f:
+                f.write(f"{result['answer']}\n{sources}")
+        except Exception as e:
+            print(f"Error processing your question: {e}")
+
+
 if __name__ == "__main__":
-    main()
+    config = get_config_from_args()
+
+    if config.test:
+        test()
+    else:
+        main()
+    # main()

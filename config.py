@@ -3,6 +3,7 @@ from typing import List, Optional
 
 @dataclass
 class OllamaConfig:
+    prompt: Optional[str] = None
     endpoint: str = "http://localhost:11434"
     model: str = "mistral"
     embedding_model: str = "all-minilm"

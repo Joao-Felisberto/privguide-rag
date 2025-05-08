@@ -1,7 +1,8 @@
 **/*.tmp
 **/*.old
 
-tests/
+/tests/*
+# !/tests/prompts/
 
 **/__pycache__/
 
