@@ -9,6 +9,7 @@ class OllamaConfig:
     embedding_model: str = "all-minilm"
     stream_response: bool = False
     only_print_prompt: bool = False
+    context_files: Optional[List[str]] = None
 
 @dataclass
 class VectorStoreConfig:

@@ -1,4 +1,4 @@
-from typing import List, TypedDict
+from typing import List, TypedDict, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langgraph.graph import StateGraph, END
@@ -6,7 +6,7 @@ from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain.storage import LocalFileStore
 from langchain.embeddings import CacheBackedEmbeddings
-from config import OllamaConfig, EmbeddingCacheConfig
+from config import AppConfig, OllamaConfig, EmbeddingCacheConfig
 
 class State(TypedDict):
     question: str
@@ -26,10 +26,10 @@ def initialize_llm_components(ollama_config: OllamaConfig, cache_config: Embeddi
     )
     return llm, cached_embeddings
 
-def create_workflow(retriever, llm, prompt_template: str = None, only_print_prompt: bool = False, stream: bool = False):
+def create_workflow(vector_store, config: AppConfig, llm, prompt_template: str = None, only_print_prompt: bool = False, stream: bool = False):
     """Create and return the LangGraph workflow with type safety."""
     template = prompt_template or """
-    You are an expert in JSON schemas. Use the following context to answer the question.  
+    Use the following context to answer the question.  
     Cite the source of each fact you mention by referencing the source filename.  
     Context:  
     {context}
@@ -37,11 +37,23 @@ def create_workflow(retriever, llm, prompt_template: str = None, only_print_prom
     Question: {question}
     """
     prompt = ChatPromptTemplate.from_template(template)
+    if config.ollama.context_files is not None:
+        retriever = vector_store.as_retriever(
+            search_kwargs={
+                "k": config.vector_store.retriever_k,
+                "filter": config.vector_store.retriever_filter
+            }
+        )
 
     def retrieve(state: State):
         print("Retrieving relevant documents...")
         question = state["question"]
-        docs = retriever.invoke(question)
+        
+        if config.ollama.context_files is not None:
+            docs = retriever.invoke(question)
+        else:
+            docs = vector_store.get_by_ids(config.ollama.context_files)
+        
         return {"context": docs, "question": question}
 
     def generate(state: State):

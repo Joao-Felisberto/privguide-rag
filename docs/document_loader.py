@@ -62,6 +62,7 @@ def load_single_document(file_path: str) -> List[Document]:
                 f_data = json.loads(f.read())
             compact_schema = process_json_schema(f_data)
             processed_doc = Document(
+                id=file_path,
                 page_content=compact_schema,
                 metadata={"source": file_path},
             )

@@ -28,7 +28,9 @@ def get_config_from_args(arg_list: Optional[List[str]] = None) -> AppConfig:
                        help="Do not wait for the response to generate and stream it instead")
     parser.add_argument('--only-print-prompt', action=BooleanOptionalAction,
                        help="Do not send the augmented prompt to the llm and print it instead")
-    
+    parser.add_argument('--context-files', nargs='+',
+                       help="The files to use as context of all the queries")
+
     # Vector store config
     parser.add_argument('--vector-dir', 
                        help="Directory for vector store persistence")
@@ -69,6 +71,8 @@ def get_config_from_args(arg_list: Optional[List[str]] = None) -> AppConfig:
         config.ollama.stream_response = args.stream_response
     if args.only_print_prompt:
         config.ollama.only_print_prompt = args.only_print_prompt
+    if args.context_files:
+        config.ollama.context_files = args.context_files
     
     if args.vector_dir:
         config.vector_store.directory = args.vector_dir
@@ -107,7 +111,7 @@ def main(arg_l: Optional[List[str]] = None):
 
     print("Creating vector store...")
     start_time = time.time()
-    vector_store, retriever = initialize_vector_store(
+    vector_store = initialize_vector_store(
         embeddings, 
         config.vector_store, 
         documents
@@ -115,7 +119,7 @@ def main(arg_l: Optional[List[str]] = None):
     print(f"Vector store created in {time.time() - start_time:.2f} seconds")
 
     print("Creating workflow...")
-    graph = create_workflow(retriever, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
+    graph = create_workflow(vector_store, config, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
     print("System ready!")
 
     if config.test:
@@ -172,6 +176,8 @@ def test():
 
     for test in metadata: 
         config = get_config_from_args(test["args"].split())
+        print(config)
+        return
 
         print("Initializing components...")
         llm, embeddings = initialize_llm_components(config.ollama, config.embedding_cache)
@@ -188,7 +194,7 @@ def test():
 
         print("Creating vector store...")
         start_time = time.time()
-        vector_store, retriever = initialize_vector_store(
+        vector_store = initialize_vector_store(
             embeddings, 
             config.vector_store, 
             documents
@@ -196,7 +202,7 @@ def test():
         print(f"Vector store created in {time.time() - start_time:.2f} seconds")
 
         print("Creating workflow...")
-        graph = create_workflow(retriever, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
+        graph = create_workflow(vector_store, config, llm, only_print_prompt=config.ollama.only_print_prompt, stream=config.ollama.stream_response)
         print("System ready!")
 
         answers = os.listdir("tests/answers")
@@ -208,7 +214,7 @@ def test():
             prompt = f.read()
         try:
             result = graph.invoke({"question": prompt})
-            sources = '\n- '.join([doc.metadata['source'] for doc in result["context"]])
+            sources = ''.join([f"\n- {doc.metadata['source']}" for doc in result["context"]])
             with open(f"tests/answers/{test['prompt']}", "w") as f:
                 f.write(f"{result['answer']}\n{sources}")
         except Exception as e:
